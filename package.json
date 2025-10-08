@@ -1,0 +1,114 @@
+{
+  "name": "pystacker",
+  "displayName": "PyStacker",
+  "description": "Capture Python stack traces from terminals using py-spy",
+  "icon": "media/pystacker.png",
+  "version": "0.4.0",
+  "publisher": "JoelSquire",
+  "author": {
+    "name": "Joel Squire"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JoelSquire/pystacker"
+  },
+  "engines": {
+    "vscode": "^1.104.0"
+  },
+  "categories": [
+    "Debuggers",
+    "Other"
+  ],
+  "keywords": [
+    "python",
+    "stack trace",
+    "profiling",
+    "py-spy",
+    "debugging"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "pystacker.capture",
+        "title": "Capture a stack trace from a Python process running in this terminal",
+        "shortTitle": "Capture stack trace",
+        "icon": "$(debug-stackframe)"
+      },
+      {
+        "command": "pystacker.refresh",
+        "title": "Refresh stack trace",
+        "icon": "$(refresh)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "pystacker.capture",
+          "when": "view == terminal",
+          "group": "navigation"
+        }
+      ],
+      "terminal/context": [
+        {
+          "command": "pystacker.capture",
+          "group": "navigation@1"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "PyStacker",
+      "properties": {
+        "pystacker.outputFormat": {
+          "type": "string",
+          "enum": [
+            "text",
+            "json"
+          ],
+          "default": "json",
+          "description": "Output format for stack traces (text or JSON)"
+        },
+        "pystacker.includeSubprocesses": {
+          "type": "boolean",
+          "default": false,
+          "description": "Include subprocesses in stack trace capture (-s flag)"
+        },
+        "pystacker.showLocalVariables": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show local variables in stack traces (-l flag)"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build:esbuild",
+    "build:esbuild": "node esbuild.config.js",
+    "build:esbuild:prod": "node esbuild.prod.config.js",
+    "build": "npm run build:esbuild",
+    "compile": "tsc -p .",
+    "watch": "tsc -w -p .",
+    "package:win32": "npm run build:esbuild:prod && vsce package --target win32-x64",
+    "package:linux": "npm run build:esbuild:prod && vsce package --target linux-x64",
+    "package:darwin": "npm run build:esbuild:prod && vsce package --target darwin-x64 darwin-arm64",
+    "package:all": "npm run package:win32 && npm run package:linux && npm run package:darwin",
+    "postinstall": "node scripts/setup-pystack.js",
+    "optimize:image": "node scripts/optimize-image.js"
+  },
+  
+  "devDependencies": {
+    "sharp": "^0.32.0",
+    "@types/cross-spawn": "^6.0.6",
+    "@types/node": "^18.16.19",
+    "@types/vscode": "^1.104.0",
+    "@vscode/vsce": "^3.6.2",
+    "@vscode-elements/elements": "^2.3.1",
+    "esbuild": "^0.25.10",
+    "typescript": "^5.2.2"
+  },
+  "dependencies": {
+    "cross-spawn": "^7.0.6",
+    "preact": "^10.27.2"
+  }
+}

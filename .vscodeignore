@@ -1,0 +1,56 @@
+/.git
+/.github
+/.vscode
+/.vscodeignore
+/*.log
+/*.gz
+node_modules/**/test/**
+node_modules/**/tests/**
+node_modules/**/.bin
+node_modules/**/*.map
+
+# Exclude source and build-time files
+/src
+/**/*.ts
+/**/*.tsx
+/.eslintrc*
+/.prettierrc*
+/.npmrc
+tsconfig*.json
+README-*.md
+BUILDING.md
+
+# Exclude scripts except sample runners
+/scripts/**
+!scripts/run-sample.ps1
+!scripts/run-sample.sh
+!scripts/run-sample.bat
+!scripts/sample.py
+
+# Exclude dev tooling and heavy web deps that are already bundled in out/
+node_modules/**
+
+# Exclude optimizer and other development scripts
+scripts/optimize-image.js
+scripts/__pycache__/
+
+# Lockfiles
+package-lock.json
+yarn.lock
+.vscode/**
+.vscode-test/**
+src/**
+.gitignore
+tsconfig.json
+**/*.map
+**/*.ts
+!out/**/*.js
+node_modules/**
+!node_modules/@vscode-elements/**
+scripts/setup-pystack.js
+*.log
+.venv/**
+esbuild.config.js
+esbuild.prod.config.js
+
+

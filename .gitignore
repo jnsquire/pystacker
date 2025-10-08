@@ -1,0 +1,7 @@
+node_modules/
+out/
+*.log
+/.vscode/.history
+.venv/
+bin/
+*.vsix
