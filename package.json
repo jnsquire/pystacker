@@ -4,14 +4,15 @@
   "description": "Capture Python stack traces from terminals using py-spy",
   "icon": "media/pystacker.png",
   "version": "0.4.0",
-  "publisher": "JoelSquire",
+  "publisher": "jsquire",
   "author": {
-    "name": "Joel Squire"
+    "name": "Joel Squire",
+    "email": "joel@squire.org"
   },
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/JoelSquire/pystacker"
+    "url": "https://github.com/jnsquire/pystacker"
   },
   "engines": {
     "vscode": "^1.104.0"
@@ -23,7 +24,6 @@
   "keywords": [
     "python",
     "stack trace",
-    "profiling",
     "py-spy",
     "debugging"
   ],
