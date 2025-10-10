@@ -1,0 +1,49 @@
+:root {
+  --bg: var(--vscode-editor-background, #1e1e1e);
+  --fg: var(--vscode-editor-foreground, #dddddd);
+  --muted: rgba(200,200,200,0.45);
+  --panel-bg: var(--vscode-sideBar-background, rgba(0,0,0,0.06));
+  --accent: var(--vscode-focusBorder, #007acc);
+  --badge-bg: rgba(0,0,0,0.12);
+  --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, 'Roboto Mono', 'Courier New', monospace;
+}
+
+html, body {
+  margin: 0; padding: 12px; box-sizing: border-box;
+  background: var(--bg); color: var(--fg); font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial);
+  font-size: 13px; -webkit-font-smoothing:antialiased;
+}
+
+h1 { font-size: 1.05rem; margin: 0; font-weight: 600; color: var(--fg); }
+
+.meta { color: var(--muted); margin-top: 6px; margin-bottom: 8px; }
+
+.threadPanel { display: block; margin: 10px 0; border-radius: 6px; overflow: hidden; box-shadow: 0 1px 0 rgba(0,0,0,0.25); }
+.threadPanel::part(header) { padding: 8px 12px; }
+.threadPanelHeader { display:flex; align-items:center; gap:12px; }
+
+.threadContent { padding: 10px 12px; background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(0,0,0,0.02)); }
+
+.threadTitle { font-weight: 600; color: var(--fg); }
+.badges { margin-left: auto; display:flex; gap:8px; align-items:center; }
+.badge { background: rgba(125,125,125,0.12); color: var(--fg); padding: 3px 7px; border-radius: 12px; font-size: 12px; }
+
+.frame { border-left: 3px solid rgba(0,0,0,0.08); padding: 8px 12px; margin: 6px 0; background: rgba(0,0,0,0.02); border-radius: 4px; }
+.frameHeader { display:flex; align-items:center; gap:12px; }
+.frameTitle { font-weight: 500; }
+.frameMeta { color: var(--muted); font-size: 12px; }
+
+.localsList { margin-top:8px; display:flex; flex-direction:column; gap:6px; }
+.localItem { display:flex; gap:12px; align-items:flex-start; }
+.localName { width:160px; color: var(--muted); font-family: var(--mono); }
+.varRepr { flex:1; font-family: var(--mono); background: rgba(0,0,0,0.02); padding:4px 8px; border-radius:4px; }
+/* Apply halo/outline to the whole row only when addr-highlight added globally */
+.localItem:global(.addr-highlight) {
+  background: linear-gradient(90deg, rgba(0,122,204,0.06), rgba(0,0,0,0.02));
+  border-radius:4px;
+}
+
+.mono { background: rgba(0,0,0,0.03); padding:8px; border-radius:4px; font-family: var(--mono); font-size:12px; overflow:auto; }
+
+/* Buttons and header layout */
+#refreshBtn { margin-left: 8px; }

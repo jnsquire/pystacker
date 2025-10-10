@@ -489,22 +489,25 @@ async function findPythonChildProcesses(parentPid: number, foundProcesses: Set<n
     }
 
     private static getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri) {
-        const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'out', 'webview.js'));
-        const nonce = Math.random().toString(36).slice(2, 10);
+                const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'out', 'webview.js'));
+                const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'out', 'webview.css'));
+                const nonce = Math.random().toString(36).slice(2, 10);
+                const cspSource = webview.cspSource; // allows webview.asWebviewUri resources
 
-        // Minimal loader HTML - the Preact app in out/webview.js will post 'ready' and handle 'init'
-        return `<!doctype html>
+                // Minimal loader HTML - the Preact app in out/webview.js will post 'ready' and handle 'init'
+                return `<!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; script-src 'nonce-${nonce}'; style-src 'unsafe-inline';">
-    <title>PyStacker</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script nonce="${nonce}" src="${scriptUri}"></script>
-  </body>
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${cspSource} data:; style-src ${cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}' ${cspSource};">
+        <title>PyStacker</title>
+    </head>
+    <body>
+        <div id="root"></div>
+        <link rel="stylesheet" href="${styleUri}">
+        <script nonce="${nonce}" src="${scriptUri}"></script>
+    </body>
 </html>`;
     }
 }

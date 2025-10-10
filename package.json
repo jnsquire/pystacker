@@ -101,14 +101,18 @@
     "sharp": "^0.32.0",
     "@types/cross-spawn": "^6.0.6",
     "@types/node": "^18.16.19",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
     "@types/vscode": "^1.104.0",
     "@vscode/vsce": "^3.6.2",
     "@vscode-elements/elements": "^2.3.1",
     "esbuild": "^0.25.10",
+    "esbuild-css-modules-plugin": "^3.1.5",
     "typescript": "^5.2.2"
   },
   "dependencies": {
     "cross-spawn": "^7.0.6",
-    "preact": "^10.27.2"
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
   }
 }

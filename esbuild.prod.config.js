@@ -18,3 +18,23 @@ esbuild.build({
   console.error(err);
   process.exit(1);
 });
+
+// Build webview bundle for production
+const CssModulesPlugin = require('esbuild-css-modules-plugin');
+
+esbuild.build({
+  entryPoints: ['src/webview/app.tsx'],
+  bundle: true,
+  platform: 'browser',
+  target: ['chrome58'],
+  outfile: path.join(outdir, 'webview.js'),
+  sourcemap: false,
+  minify: true,
+  define: { 'process.env.NODE_ENV': '"production"' },
+  plugins: [
+    CssModulesPlugin()
+  ]
+}).catch((err) => {
+  console.error('webview build failed', err);
+  process.exit(1);
+});

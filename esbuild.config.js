@@ -19,6 +19,8 @@ esbuild.build({
 });
 
 // Build the webview bundle (preact) as a separate browser-targeted file
+const CssModulesPlugin = require('esbuild-css-modules-plugin');
+
 esbuild.build({
   entryPoints: ['src/webview/app.tsx'],
   bundle: true,
@@ -27,7 +29,12 @@ esbuild.build({
   outfile: path.join(outdir, 'webview.js'),
   sourcemap: true,
   minify: false,
-  define: { 'process.env.NODE_ENV': '"production"' }
+  define: { 'process.env.NODE_ENV': '"production"' },
+  plugins: [
+    CssModulesPlugin({
+      localIdentName: '[name]__[local]___[hash:base64:5]',
+    })
+  ]
 }).catch((err) => {
   console.error('webview build failed', err);
   process.exit(1);
