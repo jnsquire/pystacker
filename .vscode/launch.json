@@ -5,6 +5,7 @@
       "name": "Launch Extension",
       "type": "extensionHost",
       "request": "launch",
+      "preLaunchTask": "build:all",
       "runtimeExecutable": "${execPath}",
       "args": ["--extensionDevelopmentPath=${workspaceFolder}"],
       "outFiles": ["${workspaceFolder}/out/**/*.js"]

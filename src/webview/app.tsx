@@ -2,7 +2,17 @@
 import React, { createContext, useState, useEffect, useContext, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { StackFrame, ThreadDump } from '../shared/types';
-import '@vscode-elements/elements';
+import '@vscode-elements/elements/dist/vscode-collapsible/index.js';
+import '@vscode-elements/elements/dist/vscode-icon/index.js';
+import '@vscode-elements/elements/dist/vscode-table/index.js';
+import '@vscode-elements/elements/dist/vscode-table-header/index.js';
+import '@vscode-elements/elements/dist/vscode-table-body/index.js';
+import '@vscode-elements/elements/dist/vscode-table-header-cell/index.js';
+import '@vscode-elements/elements/dist/vscode-table-row/index.js';
+import '@vscode-elements/elements/dist/vscode-table-cell/index.js';
+import '@vscode-elements/elements/dist/vscode-badge/index.js';
+import '@vscode-elements/elements/dist/vscode-button/index.js';
+import '@vscode-elements/elements/dist/vscode-progress-ring/index.js';
 import styles from './app.module.css';
 
 // VS Code API context/provider to centralize acquireVsCodeApi()
@@ -27,6 +37,19 @@ function VsCodeApiProvider({ children } : { children: React.ReactNode }){
 
 function Frame({ frame }: { frame: StackFrame }) {
   const locals = frame.locals ?? [];
+  const addHighlight = (addrClass?: string) => {
+    if (!addrClass) return;
+    const els = document.getElementsByClassName(addrClass);
+    if (els.length > 1) {
+      Array.from(els).forEach((el) => el.classList.add('addr-highlight'));
+    }
+  };
+
+  const removeHighlight = (addrClass?: string) => {
+    if (!addrClass) return;
+    const els = document.getElementsByClassName(addrClass);
+    Array.from(els).forEach((el) => el.classList.remove('addr-highlight'));
+  };
   return (
     <div className={styles.frame}>
       <div className={styles.frameHeader}>
@@ -38,20 +61,38 @@ function Frame({ frame }: { frame: StackFrame }) {
       </div>
       {locals.length > 0 && (
         <div className={styles.localsList}>
-          {locals.map((loc, idx) => {
-            const rawAddr = loc.addr ?? '';
-            const addrClass = rawAddr !== '' ? `addr_${String(rawAddr).replace(/[^a-zA-Z0-9_-]/g, '_')}` : '';
-            return (
-              <div key={`${loc.name ?? 'local'}-${idx}`} className={`${styles.localItem} localItem ${addrClass}`}>
-                <div className={`${styles.localName} localName ${loc.arg ? 'arg' : ''} ${addrClass}`} title={rawAddr ? `addr: ${rawAddr}` : undefined}>
-                  <code>{loc.name}</code>
-                </div>
-                <div className={`${styles.varRepr} ${addrClass}`} title={rawAddr ? `addr: ${rawAddr}` : undefined}>
-                  <code>{loc.repr}</code>
-                </div>
-              </div>
-            );
-          })}
+          {/* Use vscode-table with resizable columns for nicer alignment and native VS Code look */}
+          <vscode-table resizable bordered bordered-columns class={styles.localsTable}>
+            <vscode-table-header>
+              <vscode-table-header-cell>Name</vscode-table-header-cell>
+              <vscode-table-header-cell>Value</vscode-table-header-cell>
+              <vscode-table-header-cell>Addr</vscode-table-header-cell>
+            </vscode-table-header>
+            <vscode-table-body>
+              {locals.map((loc, idx) => {
+                const rawAddr = loc.addr ?? '';
+                const addrClass = rawAddr !== '' ? `addr_${String(rawAddr).replace(/[^a-zA-Z0-9_-]/g, '_')}` : '';
+                return (
+                  <vscode-table-row key={`${loc.name ?? 'local'}-${idx}`} class={addrClass}>
+                    <vscode-table-cell title={rawAddr ? `addr: ${rawAddr}` : undefined} class={addrClass}>
+                      {loc.name}
+                    </vscode-table-cell>
+                    <vscode-table-cell
+                      title={rawAddr ? `addr: ${rawAddr}` : undefined}
+                      class={addrClass}
+                      onMouseEnter={() => addHighlight(addrClass)}
+                      onMouseLeave={() => removeHighlight(addrClass)}
+                    >
+                      {loc.repr}
+                    </vscode-table-cell>
+                    <vscode-table-cell class={addrClass} title={rawAddr ? `addr: ${rawAddr}` : undefined}>
+                      {rawAddr}
+                    </vscode-table-cell>
+                  </vscode-table-row>
+                );
+              })}
+            </vscode-table-body>
+          </vscode-table>
         </div>
       )}
     </div>
@@ -62,17 +103,7 @@ function ThreadView({ thread }: { thread: ThreadDump }) {
   const frames = (thread.frames || []).slice().reverse();
   const processInfoJson = thread.process_info == null ? null : JSON.stringify(thread.process_info, null, 2);
   return (
-    // Use vscode-panel for a nicer presentation inside VS Code webview
-    <vscode-panel class={styles.threadPanel}>
-      <div slot="header" className={styles.threadPanelHeader}>
-        <div className={styles.threadTitle}>{thread.thread_name || 'Thread'} (thread_id: {thread.thread_id ?? 'n/a'})</div>
-        <div className={styles.badges}>
-          <span className={styles.badge}>pid: {thread.pid}</span>
-          {thread.os_thread_id != null && <span className={styles.badge}>os_tid: {thread.os_thread_id}</span>}
-          <span className={styles.badge}>{thread.active ? 'active' : 'inactive'}</span>
-          <span className={styles.badge}>{thread.owns_gil ? 'owns_gil' : 'no_gil'}</span>
-        </div>
-      </div>
+    <vscode-collapsible open heading={thread.thread_name || 'Thread'} description={`pid ${thread.pid} ${!thread.active ? '(inactive)' : ''} ${thread.owns_gil ? '(owns_gil)' : '(no_gil)'}`}>
       <div className={styles.threadContent}>
         {processInfoJson && (
           <pre className={`json ${styles.mono}`}>
@@ -85,7 +116,7 @@ function ThreadView({ thread }: { thread: ThreadDump }) {
           frames.map((f, idx) => <Frame key={`${thread.thread_id ?? 'thread'}-${idx}`} frame={f} />)
         )}
       </div>
-    </vscode-panel>
+    </vscode-collapsible>
   );
 }
 
@@ -103,8 +134,8 @@ function App() {
       const msg = ev.data;
       if (!msg || !msg.command) return;
       if (msg.command === 'init') {
-  setThreads(msg.threads || []);
-  setProcessInfo(msg.processInfo || null);
+        setThreads(msg.threads || []);
+        setProcessInfo(msg.processInfo || null);
         setLastUpdated(new Date().toLocaleString());
         setLoading(false);
         setError(null);
@@ -166,9 +197,8 @@ function App() {
       {error && (
         <div style={{marginTop: 8, color: 'var(--vscode-inputValidation-errorForeground, #f14c4c)'}}>{error}</div>
       )}
-    <div className={styles.meta}>Rendered {threads.length} thread(s)</div>
       <div id="container">
-  {threads.map((th, idx) => (
+        {threads.map((th, idx) => (
           <ThreadView key={`thread-${th.thread_id ?? th.pid ?? idx}`} thread={th} />
         ))}
       </div>

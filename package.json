@@ -3,7 +3,7 @@
   "displayName": "PyStacker",
   "description": "Capture Python stack traces from terminals using py-spy",
   "icon": "media/pystacker.png",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "publisher": "jsquire",
   "author": {
     "name": "Joel Squire",
@@ -87,6 +87,7 @@
     "build:esbuild": "node esbuild.config.js",
     "build:esbuild:prod": "node esbuild.prod.config.js",
     "build": "npm run build:esbuild",
+    "build:all": "npm run build && npm run compile",
     "compile": "tsc -p .",
     "watch": "tsc -w -p .",
     "package:win32": "npm run build:esbuild:prod && vsce package --target win32-x64",
