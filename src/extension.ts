@@ -6,9 +6,6 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import type { ThreadDump } from './shared/types.js';
 
-
-export function deactivate() {}
-
 function getBundledPySpyPath(context: vscode.ExtensionContext): string {
     const binDir = path.join(context.extensionPath, 'bin');
     const pyspyExe = process.platform === 'win32'
@@ -30,18 +27,28 @@ type PanelEntry = {
 
 class StackTraceWebviewProvider {
     private panels: Map<number, PanelEntry> = new Map();
-    private output: vscode.OutputChannel | undefined;
+    private output: vscode.OutputChannel;
 
     constructor(private context: vscode.ExtensionContext) {
-    }
-
-    private getOutputChannel() {
-        return (this.output ??= vscode.window.createOutputChannel('PyStacker'));
+        this.output = vscode.window.createOutputChannel('PyStacker');
     }
 
     // Public logging helper so callers outside the class can write to the same output channel
     public log(message: string) {
-        this.getOutputChannel().appendLine(message);
+        this.output.appendLine(message);
+    }
+
+    public async refresh(pid: number, name?: string, opts?: { showNotification?: boolean }) {
+        if (!pid) {
+            vscode.window.showErrorMessage('pystacker.refresh called without a PID');
+            return;
+        }
+
+        try {
+            await this.captureStackForPid(this.context, pid, name ?? `pid:${pid}`, opts);
+        } catch (err: any) {
+            this.postErrorToPanel(pid, `Failed to refresh stack for PID ${pid}: ${err?.message ?? String(err)}`);
+        }
     }
 
     // Post an error message to the webview for a given pid, if present.
@@ -51,7 +58,7 @@ class StackTraceWebviewProvider {
         if (panel) {
             try {
                 panel.webview.postMessage({ command: 'error', message });
-                this.getOutputChannel().appendLine(`posted error to pid=${pid}: ${message}`);
+                this.output.appendLine(`posted error to pid=${pid}: ${message}`);
                 return;
             } catch (e) {
                 // ignore and fall through to notification
@@ -61,9 +68,8 @@ class StackTraceWebviewProvider {
     }
 
     public show(context: vscode.ExtensionContext, stackData: ThreadDump[], processInfo: { pid: number; name: string; }) {
-        const output = this.getOutputChannel();
         const pid = processInfo.pid;
-        output.appendLine(`show(): pid=${pid} name=${processInfo.name} threads=${(stackData || []).length}`);
+        this.output.appendLine(`show(): pid=${pid} name=${processInfo.name} threads=${(stackData || []).length}`);
 
         const column = vscode.ViewColumn.Beside;
         const existingEntry = this.panels.get(pid);
@@ -77,22 +83,22 @@ class StackTraceWebviewProvider {
         try {
             const key = `pystacker.latest.${pid}`;
             context.workspaceState.update(key, { threads: stackData, processInfo });
-            output.appendLine(`show(): persisted state to workspaceState key=${key}`);
+            this.output.appendLine(`show(): persisted state to workspaceState key=${key}`);
         } catch (e) {
-            output.appendLine(`show(): failed to persist state for pid=${pid}: ${String(e)}`);
+            this.output.appendLine(`show(): failed to persist state for pid=${pid}: ${String(e)}`);
         }
 
         // Reuse existing panel for this pid if present
         const existingPanel = existingEntry?.panel;
         if (existingPanel) {
             existingPanel.reveal(column);
-            output.appendLine(`Updating existing panel for pid=${pid} (threads=${(stackData || []).length})`);
+            this.output.appendLine(`Updating existing panel for pid=${pid} (threads=${(stackData || []).length})`);
             try {
                 existingPanel.webview.postMessage({ command: 'init', threads: stackData || [], processInfo });
-                output.appendLine(`posted init to existing panel pid=${pid}`);
-                try { existingPanel.webview.postMessage({ command: 'fresh' }); output.appendLine(`posted fresh to existing panel pid=${pid}`); } catch {}
+                this.output.appendLine(`posted init to existing panel pid=${pid}`);
+                try { existingPanel.webview.postMessage({ command: 'fresh' }); this.output.appendLine(`posted fresh to existing panel pid=${pid}`); } catch {}
             } catch (e) {
-                output.appendLine(`failed to post init to existing panel pid=${pid}: ${String(e)}`);
+                this.output.appendLine(`failed to post init to existing panel pid=${pid}: ${String(e)}`);
             }
             return;
         }
@@ -114,7 +120,7 @@ class StackTraceWebviewProvider {
 
         panel.webview.onDidReceiveMessage((message: any) => {
             if (!message || !message.command) return;
-            try { this.getOutputChannel().appendLine(`webview message: ${JSON.stringify(message)}`); } catch {}
+            try { this.output.appendLine(`webview message: ${JSON.stringify(message)}`); } catch {}
 
             if (message.command === 'ready') {
                 const stored = this.panels.get(pid);
@@ -122,21 +128,21 @@ class StackTraceWebviewProvider {
                 const procInfo = stored?.processInfo || { pid, name: processInfo.name };
                 try {
                     panel.webview.postMessage({ command: 'init', threads, processInfo: procInfo });
-                    output.appendLine(`posted init to pid=${pid}`);
-                    try { panel.webview.postMessage({ command: 'fresh' }); output.appendLine(`posted fresh to new panel pid=${pid}`); } catch {}
+                    this.output.appendLine(`posted init to pid=${pid}`);
+                    try { panel.webview.postMessage({ command: 'fresh' }); this.output.appendLine(`posted fresh to new panel pid=${pid}`); } catch {}
                 } catch (e) {
-                    output.appendLine(`failed to post init to pid=${pid}: ${String(e)}`);
+                    this.output.appendLine(`failed to post init to pid=${pid}: ${String(e)}`);
                 }
             } else if (message.command === 'refresh') {
-                vscode.commands.executeCommand('pystacker.refresh', message.pid, message.name, { showNotification: false });
+                this.refresh(message.pid, message.name, { showNotification: false });
             }
         }, null, context.subscriptions);
 
         panel.onDidDispose(() => {
             this.panels.delete(pid);
-            output.appendLine(`disposed panel pid=${pid}`);
+            this.output.appendLine(`disposed panel pid=${pid}`);
             context.workspaceState.update(`pystacker.latest.${pid}`, undefined);
-            output.appendLine(`removed persisted state for pid=${pid}`);
+            this.output.appendLine(`removed persisted state for pid=${pid}`);
         }, null, context.subscriptions);
     }
 
@@ -173,28 +179,28 @@ class StackTraceWebviewProvider {
                     const fallbackKey = `pystacker.latest.${pid}`;
                     const fallback = context.workspaceState.get(fallbackKey) as any;
                     if (fallback && fallback.processInfo) {
-                        try { this.getOutputChannel().appendLine(`revivePanel: using workspaceState fallback for pid=${pid} key=${fallbackKey}`); } catch {}
+                        try { this.output.appendLine(`revivePanel: using workspaceState fallback for pid=${pid} key=${fallbackKey}`); } catch {}
                         state = { ...state, threads: state?.threads || fallback.threads, processInfo: state?.processInfo || fallback.processInfo };
                         pid = state.processInfo?.pid ?? pid;
                     }
                 } catch (e) {
-                    try { this.getOutputChannel().appendLine(`revivePanel: workspaceState lookup failed for pid=${pid}: ${String(e)}`); } catch {}
+                    try { this.output.appendLine(`revivePanel: workspaceState lookup failed for pid=${pid}: ${String(e)}`); } catch {}
                 }
             }
             const { webview } = webviewPanel;
-            try { this.getOutputChannel().appendLine(`revivePanel: pid=${pid} — setting HTML and wiring handlers`); } catch {}
+            this.output.appendLine(`revivePanel: pid=${pid} — setting HTML and wiring handlers`);
 
             webview.onDidReceiveMessage((message: any) => {
                 if (!message || !message.command) return;
-                try { this.getOutputChannel().appendLine(`revived webview message: ${JSON.stringify(message)} (pid=${pid})`); } catch {}
+                this.output.appendLine(`revived webview message: ${JSON.stringify(message)} (pid=${pid})`);
                 if (message.command === 'ready') {
                     const entry = (typeof pid === 'number') ? this.panels.get(pid) : undefined;
                     const threads = entry?.threads || state?.threads || [];
                     const process = entry?.processInfo || state?.processInfo;
-                    try { webview.postMessage({ command: 'init', threads, processInfo: process }); this.getOutputChannel().appendLine(`revivePanel: posted init on ready for pid=${pid}`); } catch (e) { this.getOutputChannel().appendLine(`revivePanel: failed to post init on ready pid=${pid}: ${String(e)}`); }
-                    try { webview.postMessage({ command: 'stale' }); this.getOutputChannel().appendLine(`revivePanel: posted stale on ready pid=${pid}`); } catch (e) { this.getOutputChannel().appendLine(`revivePanel: failed to post stale on ready pid=${pid}: ${String(e)}`); }
+                    try { webview.postMessage({ command: 'init', threads, processInfo: process }); this.output.appendLine(`revivePanel: posted init on ready for pid=${pid}`); } catch (e) { this.output.appendLine(`revivePanel: failed to post init on ready pid=${pid}: ${String(e)}`); }
+                    try { webview.postMessage({ command: 'stale' }); this.output.appendLine(`revivePanel: posted stale on ready pid=${pid}`); } catch (e) { this.output.appendLine(`revivePanel: failed to post stale on ready pid=${pid}: ${String(e)}`); }
                 } else if (message.command === 'refresh') {
-                    vscode.commands.executeCommand('pystacker.refresh', message.pid, message.name, { showNotification: false });
+                    this.refresh(message.pid, message.name, { showNotification: false });
                 }
             }, null, context.subscriptions);
 
@@ -209,7 +215,7 @@ class StackTraceWebviewProvider {
                     processInfo: state?.processInfo,
                 };
                 this.panels.set(pid, entry);
-                try { this.getOutputChannel().appendLine(`revivePanel: stored pid=${pid} in panels map`); } catch {}
+                this.output.appendLine(`revivePanel: stored pid=${pid} in panels map`);
             }
 
 
@@ -221,8 +227,10 @@ class StackTraceWebviewProvider {
                 const threads = entry?.threads || state?.threads || [];
                 const process = entry?.processInfo || state?.processInfo;
                 webview.postMessage({ command: 'init', threads, processInfo: process });
-                try { this.getOutputChannel().appendLine(`revivePanel: immediate init posted for pid=${pid}`); } catch {}
-            } catch (e) { try { this.getOutputChannel().appendLine(`revivePanel: immediate init failed for pid=${pid}: ${String(e)}`); } catch {} }
+                this.output.appendLine(`revivePanel: immediate init posted for pid=${pid}`);
+            } catch (e) {
+                this.output.appendLine(`revivePanel: immediate init failed for pid=${pid}: ${String(e)}`);
+            }
 
             // Fallback: post again shortly after to handle timing vagaries
             setTimeout(() => {
@@ -231,19 +239,21 @@ class StackTraceWebviewProvider {
                     const threads = entry?.threads || state?.threads || [];
                     const process = entry?.processInfo || state?.processInfo;
                     webview.postMessage({ command: 'init', threads, processInfo: process });
-                    try { this.getOutputChannel().appendLine(`revivePanel: delayed init posted for pid=${pid}`); } catch {}
-                } catch (e) { try { this.getOutputChannel().appendLine(`revivePanel: delayed init failed for pid=${pid}: ${String(e)}`); } catch {} }
+                    this.output.appendLine(`revivePanel: delayed init posted for pid=${pid}`);
+                } catch (e) {
+                    this.output.appendLine(`revivePanel: delayed init failed for pid=${pid}: ${String(e)}`);
+                }
             }, 250);
 
             webviewPanel.onDidDispose(() => {
                 if (typeof pid === 'number') {
                     this.panels.delete(pid);
-                    try { this.getOutputChannel().appendLine(`revivePanel: disposed pid=${pid}`); } catch {}
+                    this.output.appendLine(`revivePanel: disposed pid=${pid}`);
                 }
             }, null, context.subscriptions);
         } catch (e) {
             console.warn('Error reviving panel:', e);
-            try { this.getOutputChannel().appendLine(`revivePanel: error ${String(e)}`); } catch {}
+            this.output.appendLine(`revivePanel: error ${String(e)}`);
         }
     }
 
@@ -440,18 +450,7 @@ class StackTraceWebviewProvider {
             }
         });
 
-        yield vscode.commands.registerCommand('pystacker.refresh', async (pid: number, name?: string, opts?: { showNotification?: boolean }) => {
-            try {
-                if (!pid) {
-                    vscode.window.showErrorMessage('pystacker.refresh called without a PID');
-                    return;
-                }
-                // Re-run the capture helper which will open/update the webview when JSON output is produced
-                await this.captureStackForPid(this.context, pid, name ?? `pid:${pid}`, opts);
-            } catch (err: any) {
-                this.postErrorToPanel(pid, `Failed to refresh stack for PID ${pid}: ${err?.message ?? String(err)}`);
-            }
-        });
+        yield vscode.commands.registerCommand('pystacker.refresh', (pid: number, name?: string, opts?: { showNotification?: boolean }) => this.refresh(pid, name, opts));
 
         // Register a serializer so VS Code can restore webview panels across window reloads
         yield vscode.window.registerWebviewPanelSerializer('pystacker.stack', this);
@@ -662,3 +661,5 @@ export function activate(context: vscode.ExtensionContext) {
     const stackTraceWebviewProvider = new StackTraceWebviewProvider(context);
     context.subscriptions.push(...stackTraceWebviewProvider.register());
 }
+
+export function deactivate() {}

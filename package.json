@@ -17,6 +17,9 @@
   "engines": {
     "vscode": "^1.104.0"
   },
+  "activationEvents": [
+    "onWebviewPanel:pystacker.stack"
+  ],
   "categories": [
     "Debuggers",
     "Other"
