@@ -1,5 +1,5 @@
 /// <reference path="./vscode-elements.d.ts" />
-import React, { createContext, useState, useEffect, useContext, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { StackFrame, ThreadDump, LocalData } from '../shared/types.js';
 import '@vscode-elements/elements/dist/vscode-collapsible/index.js';
@@ -14,29 +14,15 @@ import '@vscode-elements/elements/dist/vscode-badge/index.js';
 import '@vscode-elements/elements/dist/vscode-button/index.js';
 import '@vscode-elements/elements/dist/vscode-progress-ring/index.js';
 import styles from './app.module.css';
+import { createVsCodeApi } from './vscodeApi.js';
 
-// VS Code API context/provider to centralize acquireVsCodeApi()
-const VsCodeApiContext = createContext<any>({});
+export type WebviewState = {
+    threads: ThreadDump[];
+    processInfo: { pid: number; name: string } | null;
+    lastUpdated: string | null;
+};
 
-function VsCodeApiProvider({ children } : { children: React.ReactNode }){
-  const [api] = useState(() => {
-    try {
-      const a = (window as any).acquireVsCodeApi();
-      try { console.debug('webview: acquired vscode api'); } catch {}
-      return a;
-    } catch {
-      try { console.debug('webview: no acquireVsCodeApi available'); } catch {}
-      return null;
-    }
-  });
-
-  useEffect(() => {
-    // Notify host that the webview is ready
-    try { console.debug('webview: posting ready'); api?.postMessage({ command: 'ready' }); } catch (e) { console.debug('webview: failed to post ready', e); }
-  }, [api]);
-
-  return <VsCodeApiContext.Provider value={api}>{children}</VsCodeApiContext.Provider>;
-}
+const { VsCodeApiProvider, useVsCodeApi } = createVsCodeApi<WebviewState>();
 
 function Frame({ frame }: { frame: StackFrame }) {
   const locals = frame.locals ?? [];
@@ -129,8 +115,23 @@ function App() {
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [stale, setStale] = useState(false);
   const timeoutRef = useRef<number | null>(null);
-  const api = useContext(VsCodeApiContext);
+  const api = useVsCodeApi();
+
+  const handleRefresh = useCallback(() => {
+    setError(null);
+    setLoading(true);
+    if (timeoutRef.current != null) {
+      clearTimeout(timeoutRef.current);
+    }
+    timeoutRef.current = window.setTimeout(() => {
+      setLoading(false);
+      setError('Timed out waiting for capture response (30s)');
+      timeoutRef.current = null;
+    }, 30000);
+    api?.postMessage({ command: 'refresh', pid: processInfo?.pid, name: processInfo?.name });
+  }, [api, processInfo]);
 
   useEffect(() => {
     // If the webview was restored by VS Code it may have saved state we can use immediately
@@ -158,6 +159,7 @@ function App() {
         setProcessInfo(msg.processInfo || null);
         setLastUpdated(new Date().toLocaleString());
         setLoading(false);
+        setStale(false);
         setError(null);
         if (timeoutRef.current != null) {
           clearTimeout(timeoutRef.current);
@@ -172,10 +174,19 @@ function App() {
           clearTimeout(timeoutRef.current);
           timeoutRef.current = null;
         }
+      } else if (msg.command === 'stale') {
+        setStale(true);
+        setLoading(false);
+      } else if (msg.command === 'fresh') {
+        setStale(false);
+        setLoading(false);
   }
     };
 
     window.addEventListener('message', onMessage);
+    // Ensure we aren't left in a loading state after mount (for revived panels)
+    try { setLoading(false); } catch {}
+
     return () => {
       window.removeEventListener('message', onMessage);
       if (timeoutRef.current != null) {
@@ -200,33 +211,20 @@ function App() {
     <div>
       <div style={{display:'flex',alignItems:'center'}}>
         <h1 style={{margin:0}}>Stack Trace: {processInfo?.name} (PID: {processInfo?.pid})</h1>
-        <div style={{marginLeft:12, color:'#888', fontSize:'0.9rem'}}>
-          {lastUpdated ? `Last updated: ${lastUpdated}` : ''}
-        </div>
         <div style={{marginLeft:'auto'}}>
           {/* Use a vscode-button (from vscode-elements) for a native look */}
           <div style={{display:'inline-flex', alignItems:'center', gap:8}}>
-              <vscode-button id="refreshBtn" appearance="secondary" disabled={!processInfo || loading} onClick={() => {
-                setError(null);
-                setLoading(true);
-                // start timeout to show error if no init arrives
-                if (timeoutRef.current != null) {
-                  clearTimeout(timeoutRef.current);
-                }
-                timeoutRef.current = window.setTimeout(() => {
-                  setLoading(false);
-                  setError('Timed out waiting for capture response (30s)');
-                  timeoutRef.current = null;
-                }, 30000);
-                api?.postMessage({ command: 'refresh', pid: processInfo?.pid, name: processInfo?.name });
-              }}>Refresh</vscode-button>
-              <vscode-progress-ring aria-hidden={!loading} style={{width:20, height:20, display: loading ? 'inline-block' : 'none'}}></vscode-progress-ring>
+              <div className={`${styles.lastUpdated} ${stale ? styles.stale : ''}`} title={lastUpdated ?? ''}>{loading ? 'Capturing stack trace…' : (lastUpdated ? `Last updated: ${lastUpdated}` : '')}</div>
+              <vscode-button id="refreshBtn" appearance="secondary" disabled={!processInfo || loading || stale} onClick={handleRefresh}>
+                <span className={styles.buttonContent}>Refresh
+                  <span className={styles.buttonSpinner} aria-hidden={!loading}>
+                    <vscode-progress-ring style={{width:16, height:16, opacity: loading ? 1 : 0}}></vscode-progress-ring>
+                  </span>
+                </span>
+              </vscode-button>
           </div>
         </div>
       </div>
-      {loading && (
-        <div style={{marginTop: 8, color: 'var(--vscode-descriptionForeground)'}}>Capturing stack trace…</div>
-      )}
       {error && (
         <div style={{marginTop: 8, color: 'var(--vscode-inputValidation-errorForeground, #f14c4c)'}}>{error}</div>
       )}
@@ -239,8 +237,7 @@ function App() {
   );
 }
 
-const root = createRoot(document.getElementById('root') ?? document.body);
-root.render(
+createRoot(document.getElementById('root') ?? document.body).render(
   <React.StrictMode>
     <VsCodeApiProvider>
       <App />
