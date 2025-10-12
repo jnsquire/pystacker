@@ -27,6 +27,7 @@
     "py-spy",
     "debugging"
   ],
+  "type": "module",
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
@@ -84,8 +85,8 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run build:esbuild",
-    "build:esbuild": "node esbuild.config.js",
-    "build:esbuild:prod": "node esbuild.prod.config.js",
+  "build:esbuild": "node esbuild.config.cjs",
+  "build:esbuild:prod": "node esbuild.prod.config.cjs",
     "build": "npm run build:esbuild",
     "build:all": "npm run build && npm run compile",
     "compile": "tsc -p .",

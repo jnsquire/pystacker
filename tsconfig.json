@@ -1,7 +1,8 @@
 {
   "compilerOptions": {
-    "module": "commonjs",
-    "target": "es2019",
+  "module": "nodenext",
+  "target": "es2020",
+  "moduleResolution": "nodenext",
     "outDir": "out",
     "rootDir": "src",
     "sourceMap": true,

@@ -1,7 +1,7 @@
 /// <reference path="./vscode-elements.d.ts" />
 import React, { createContext, useState, useEffect, useContext, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
-import type { StackFrame, ThreadDump } from '../shared/types';
+import type { StackFrame, ThreadDump, LocalData } from '../shared/types.js';
 import '@vscode-elements/elements/dist/vscode-collapsible/index.js';
 import '@vscode-elements/elements/dist/vscode-icon/index.js';
 import '@vscode-elements/elements/dist/vscode-table/index.js';
@@ -21,15 +21,18 @@ const VsCodeApiContext = createContext<any>({});
 function VsCodeApiProvider({ children } : { children: React.ReactNode }){
   const [api] = useState(() => {
     try {
-      return (window as any).acquireVsCodeApi();
+      const a = (window as any).acquireVsCodeApi();
+      try { console.debug('webview: acquired vscode api'); } catch {}
+      return a;
     } catch {
+      try { console.debug('webview: no acquireVsCodeApi available'); } catch {}
       return null;
     }
   });
 
   useEffect(() => {
     // Notify host that the webview is ready
-    try { api?.postMessage({ command: 'ready' }); } catch {}
+    try { console.debug('webview: posting ready'); api?.postMessage({ command: 'ready' }); } catch (e) { console.debug('webview: failed to post ready', e); }
   }, [api]);
 
   return <VsCodeApiContext.Provider value={api}>{children}</VsCodeApiContext.Provider>;
@@ -69,19 +72,19 @@ function Frame({ frame }: { frame: StackFrame }) {
               <vscode-table-header-cell>Addr</vscode-table-header-cell>
             </vscode-table-header>
             <vscode-table-body>
-              {locals.map((loc, idx) => {
+              {locals.map((loc: LocalData, idx: number) => {
                 const rawAddr = loc.addr ?? '';
                 const addrClass = rawAddr !== '' ? `addr_${String(rawAddr).replace(/[^a-zA-Z0-9_-]/g, '_')}` : '';
                 return (
-                  <vscode-table-row key={`${loc.name ?? 'local'}-${idx}`} class={addrClass}>
+                  <vscode-table-row key={`${loc.name ?? 'local'}-${idx}`} class={addrClass}
+                      onMouseEnter={() => addHighlight(addrClass)}
+                      onMouseLeave={() => removeHighlight(addrClass)}>
                     <vscode-table-cell title={rawAddr ? `addr: ${rawAddr}` : undefined} class={addrClass}>
                       {loc.name}
                     </vscode-table-cell>
                     <vscode-table-cell
                       title={rawAddr ? `addr: ${rawAddr}` : undefined}
                       class={addrClass}
-                      onMouseEnter={() => addHighlight(addrClass)}
-                      onMouseLeave={() => removeHighlight(addrClass)}
                     >
                       {loc.repr}
                     </vscode-table-cell>
@@ -113,7 +116,7 @@ function ThreadView({ thread }: { thread: ThreadDump }) {
         {frames.length === 0 ? (
           <div>No frames captured</div>
         ) : (
-          frames.map((f, idx) => <Frame key={`${thread.thread_id ?? 'thread'}-${idx}`} frame={f} />)
+          frames.map((f: StackFrame, idx: number) => <Frame key={`${thread.thread_id ?? 'thread'}-${idx}`} frame={f} />)
         )}
       </div>
     </vscode-collapsible>
@@ -130,8 +133,25 @@ function App() {
   const api = useContext(VsCodeApiContext);
 
   useEffect(() => {
+    // If the webview was restored by VS Code it may have saved state we can use immediately
+    try {
+      const saved = api?.getState?.();
+      try { console.debug('webview: getState returned', saved); } catch {}
+      if (saved && saved.threads && saved.processInfo) {
+        setThreads(saved.threads || []);
+        setProcessInfo(saved.processInfo || null);
+        setLastUpdated(saved.lastUpdated || new Date().toLocaleString());
+        setLoading(false);
+        setError(null);
+      }
+    } catch (e) {
+      try { console.debug('webview: getState failed', e); } catch {}
+      // ignore if acquireVsCodeApi isn't available in this environment
+    }
+
     const onMessage = (ev: MessageEvent) => {
       const msg = ev.data;
+      try { console.debug('webview: received message', msg); } catch {}
       if (!msg || !msg.command) return;
       if (msg.command === 'init') {
         setThreads(msg.threads || []);
@@ -143,6 +163,8 @@ function App() {
           clearTimeout(timeoutRef.current);
           timeoutRef.current = null;
         }
+        // Persist this state so VS Code can restore it when the webview is deserialized
+        try { api?.setState?.({ threads: msg.threads || [], processInfo: msg.processInfo || null, lastUpdated: new Date().toLocaleString() }); } catch {}
       } else if (msg.command === 'error') {
         setLoading(false);
         setError(msg.message || 'Unknown error');
@@ -150,7 +172,7 @@ function App() {
           clearTimeout(timeoutRef.current);
           timeoutRef.current = null;
         }
-      }
+  }
     };
 
     window.addEventListener('message', onMessage);
@@ -162,6 +184,17 @@ function App() {
       }
     };
   }, []);
+
+  // Keep persisted VS Code webview state in sync whenever threads/processInfo change
+  useEffect(() => {
+    try {
+      if (api?.setState) {
+        api.setState({ threads, processInfo, lastUpdated });
+      }
+    } catch {
+      // ignore
+    }
+  }, [api, threads, processInfo, lastUpdated]);
 
   return (
     <div>
